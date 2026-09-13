@@ -1,6 +1,6 @@
 [package]
 name    = "mezze-python"
-version = "0.2.0"
+version = "0.2.1"
 
 # Two library entry points, both re-exported to consumers via the
 # package's snake_case module name `mezze_python`:
@@ -47,7 +47,7 @@ runtime_dir = ".deps/python"
 "org.graalvm.python:python-language"          = "25.0.3"
 "org.graalvm.python:python-resources"         = "25.0.3"
 "org.graalvm.python:python-launcher"          = "25.0.3"
-"land.meridia.mezze:polyglot-python-natives"  = "0.2.0"
+"dev.mezze:polyglot-python-natives"           = "0.2.0"
 
 [[maven-repo]]
 id  = "mezze-lang"
