@@ -1,6 +1,6 @@
 [package]
 name    = "mezze-python"
-version = "0.1.1"
+version = "0.2.0"
 
 # Two library entry points, both re-exported to consumers via the
 # package's snake_case module name `mezze_python`:
@@ -34,29 +34,21 @@ install     = "graalpy -m pip install --disable-pip-version-check --no-cache-dir
 runtime_env = "PYTHONPATH"
 runtime_dir = ".deps/python"
 
-# ─── JVM classpath deposits ────────────────────────────────────────
+# ─── Maven coordinates ─────────────────────────────────────────────
 #
-# Every entry lands on the wire-child JVM classpath via
-# ResolvedJarsClasspath. All four are dedicated to the Python
-# provider surface:
-#   - polyglot-python-natives — this package's own NativePlugin SPI
-#     jar (registers __native_python_eval / __native_python_import_module
-#     against NativeDispatch's table at classload time). Committed
-#     to `jars/` in-repo and served over `raw.githubusercontent.com`
-#     at the pinned tag: reachable on any machine, sha-verified,
-#     no GitHub Releases auth needed to publish (that path is what
-#     Phase 6 will move to; keeping the URL scheme stable is a
-#     drop-in swap when the release upload is available).
-#   - python-language / -resources / -launcher — GraalPy itself.
+# Every entry lands on the wire-child JVM classpath via Aether's
+# resolution into `~/.mezze/cache/maven/`. Transitive deps come
+# along for free (this is why `[maven]` supersedes `[jars]` — no
+# manual sha bookkeeping, real dependency management).
 #
-# The three GraalPy jars are ALSO bundled in mezze-runtime.jar during
-# Phase 2 (see interpreter/build.gradle.kts). This duplication is
-# intentional and harmless — the runtime-jar copy wins on the boot
-# classpath and Phase 6 will strip GraalPy from mezze-runtime.jar so
-# these entries become the sole source. Sha256s are verified by
-# `mez sync` against `~/.mezze/store/jars/<sha>/<name>.jar`.
-[jars]
-polyglot-python-natives = "https://raw.githubusercontent.com/mezze-lang/mezze-python/0.1.1/jars/polyglot-python-natives-0.1.0.jar#sha256:a05bbb1d7b3d366c40683a509a104ccb84092c214e756414a7e705d8dbba794b"
-python-language         = "https://repo1.maven.org/maven2/org/graalvm/python/python-language/25.0.3/python-language-25.0.3.jar#sha256:a43239ce2d2a1250fe805387b0015871ecf914ced59589578d1d82987cdd62f9"
-python-resources        = "https://repo1.maven.org/maven2/org/graalvm/python/python-resources/25.0.3/python-resources-25.0.3.jar#sha256:974c82ba1742f0d72ad8b23f410dc5957318215817d1d91515922ac52644510e"
-python-launcher         = "https://repo1.maven.org/maven2/org/graalvm/python/python-launcher/25.0.3/python-launcher-25.0.3.jar#sha256:f3fbed5ce6cafd891a6a53b34bc8fbcc2540040d85adc302981d2ad9ead14c56"
+# Maven Central hosts the GraalPy jars; the mezze-lang maven repo
+# hosts `polyglot-python-natives`. Both are declared below.
+[maven]
+"org.graalvm.python:python-language"          = "25.0.3"
+"org.graalvm.python:python-resources"         = "25.0.3"
+"org.graalvm.python:python-launcher"          = "25.0.3"
+"land.meridia.mezze:polyglot-python-natives"  = "0.2.0"
+
+[[maven-repo]]
+id  = "mezze-lang"
+url = "https://raw.githubusercontent.com/mezze-lang/mezze-maven/main/"
