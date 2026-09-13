@@ -114,6 +114,100 @@ impl PyForeign where {
   type_name     = { it } -> __native_polyglot_type_name  { val = it },
 }
 
+## Chainable inherent methods on `Result PyForeign InteropError` — the
+## exact return type of every fallible operation above. Mirrors every
+## method on `impl PyForeign` so users can write
+##
+##     np.attr { name = "random" }
+##       .attr { name = "default_rng" }
+##       .call { args = [seed] }
+##       .attr { name = "normal" }
+##       .call { args = [mean, std, n] }
+##       .attr { name = "mean" }
+##       .call { args = [] }
+##       .as_float {}
+##
+## without a `match` between every step. Each method threads through
+## the Result: on `Ok` it delegates to the underlying `PyForeign`
+## method; on `Err` it propagates unchanged.
+##
+## The generic `impl Result 'a 'e` (map / get_or / flat_map / …) still
+## applies — this block just adds the Python-idiomatic vocabulary on
+## top for the concrete `Result PyForeign InteropError` type.
+impl Result PyForeign InteropError where {
+  ## ---- Python-idiomatic vocabulary ----
+
+  method = { it, name, args } -> match it is
+    Ok  { val = f } -> f.method { name = name, args = args }
+    Err { error }   -> Err { error = error },
+  new = { it, args } -> match it is
+    Ok  { val = f } -> f.new { args = args }
+    Err { error }   -> Err { error = error },
+  call = { it, args } -> match it is
+    Ok  { val = f } -> f.call { args = args }
+    Err { error }   -> Err { error = error },
+  attr = { it, name } -> match it is
+    Ok  { val = f } -> f.attr { name = name }
+    Err { error }   -> Err { error = error },
+  item = { it, key } -> match it is
+    Ok  { val = f } -> f.item { key = key }
+    Err { error }   -> Err { error = error },
+  set_item = { it, i, val } -> match it is
+    Ok  { val = f } -> f.set_item { i = i, val = val }
+    Err { error }   -> Err { error = error },
+  iter = { it } -> match it is
+    Ok  { val = f } -> f.iter {}
+    Err { error }  -> Err { error = error },
+  next = { it } -> match it is
+    Ok  { val = f } -> f.next {}
+    Err { error }  -> Err { error = error },
+  len = { it } -> match it is
+    Ok  { val = f } -> f.len {}
+    Err { error }  -> Err { error = error },
+
+  ## ---- Universal InteropLibrary vocabulary ----
+
+  invoke_member = { it, method, args } -> match it is
+    Ok  { val = f } -> f.invoke_member { method = method, args = args }
+    Err { error }   -> Err { error = error },
+  get_member = { it, name } -> match it is
+    Ok  { val = f } -> f.get_member { name = name }
+    Err { error }   -> Err { error = error },
+  has_member = { it, name } -> match it is
+    Ok  { val = f } -> Ok { val = f.has_member { name = name } }
+    Err { error }   -> Err { error = error },
+  execute = { it, args } -> match it is
+    Ok  { val = f } -> f.execute { args = args }
+    Err { error }   -> Err { error = error },
+  instantiate = { it, args } -> match it is
+    Ok  { val = f } -> f.instantiate { args = args }
+    Err { error }   -> Err { error = error },
+  array_at = { it, index } -> match it is
+    Ok  { val = f } -> f.array_at { index = index }
+    Err { error }   -> Err { error = error },
+  array_size = { it } -> match it is
+    Ok  { val = f } -> f.array_size {}
+    Err { error }  -> Err { error = error },
+  as_int = { it } -> match it is
+    Ok  { val = f } -> f.as_int {}
+    Err { error }  -> Err { error = error },
+  as_str = { it } -> match it is
+    Ok  { val = f } -> f.as_str {}
+    Err { error }  -> Err { error = error },
+  as_float = { it } -> match it is
+    Ok  { val = f } -> f.as_float {}
+    Err { error }  -> Err { error = error },
+  as_bool = { it } -> match it is
+    Ok  { val = f } -> f.as_bool {}
+    Err { error }  -> Err { error = error },
+  is_null = { it } -> match it is
+    Ok  { val = f } -> Ok { val = f.is_null {} }
+    Err { error }  -> Err { error = error },
+  type_name = { it } -> match it is
+    Ok  { val = f } -> Ok { val = f.type_name {} }
+    Err { error }  -> Err { error = error },
+}
+
 ## Constructors — lift a Mezze primitive into a PyForeign so it can
 ## be passed as an argument to `.method{}` / `.call{}` etc.
 pub let from_int:   { val: Int   } -> PyForeign = { val } -> __native_python_from_int   { val = val }
