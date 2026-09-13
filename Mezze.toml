@@ -1,0 +1,51 @@
+[package]
+name    = "mezze-python"
+version = "0.1.0"
+
+# Two library entry points, both re-exported to consumers via the
+# package's snake_case module name `mezze_python`:
+#   use mezze_python::python::{ Python, GraalPy, PyForeign, ... }
+#   use mezze_python::codec::{ ToPy, FromPy, PythonC }
+#
+# ModuleResolver.resolveModuleFile walks `.deps/mezze/mezze_python-*/src/`
+# so `mezze_python::python` resolves to `src/python.mz` etc. without any
+# explicit [lib] entry — the search paths already cover the layout.
+
+# ─── polyglot provider ────────────────────────────────────────────
+#
+# Declares this package as the `python` polyglot provider.
+# `mez sync` picks the install template up when a user project has
+# `[polyglot.python]` with pip specifiers. The `{prefix}` placeholder
+# expands to the resolved GraalPy install prefix; `{dest}` is
+# `runtime_dir` under the user project's root.
+[polyglot.provider]
+language    = "python"
+install     = "{prefix}/bin/graalpy -m pip install --target {dest} {packages}"
+runtime_env = "PYTHONPATH"
+runtime_dir = ".deps/python"
+
+# ─── JVM classpath deposits ────────────────────────────────────────
+#
+# Every entry lands on the wire-child JVM classpath via
+# ResolvedJarsClasspath. All four are dedicated to the Python
+# provider surface:
+#   - polyglot-python-natives — this package's own NativePlugin SPI
+#     jar (registers __native_python_eval / __native_python_import_module
+#     against NativeDispatch's table at classload time).
+#   - python-language / -resources / -launcher — GraalPy itself.
+#
+# The three GraalPy jars are ALSO bundled in mezze-runtime.jar during
+# Phase 2 (see interpreter/build.gradle.kts). This duplication is
+# intentional and harmless — the runtime-jar copy wins on the boot
+# classpath and Phase 6 will strip GraalPy from mezze-runtime.jar so
+# these entries become the sole source. Sha256s are verified by
+# `mez sync` against `~/.mezze/store/jars/<sha>/<name>.jar`.
+#
+# TODO(phase-6): once mezze-python is published as a GitHub release,
+# replace the file:// URL below with the release-asset download URL:
+#   polyglot-python-natives = "https://github.com/mezze-lang/mezze-python/releases/download/0.1.0/polyglot-python-natives-0.1.0.jar#sha256:a05bbb1d7b3d366c40683a509a104ccb84092c214e756414a7e705d8dbba794b"
+[jars]
+polyglot-python-natives = "file:///opt/mezze-python/jars/polyglot-python-natives-0.1.0.jar#sha256:a05bbb1d7b3d366c40683a509a104ccb84092c214e756414a7e705d8dbba794b"
+python-language         = "https://repo1.maven.org/maven2/org/graalvm/python/python-language/25.0.3/python-language-25.0.3.jar#sha256:a43239ce2d2a1250fe805387b0015871ecf914ced59589578d1d82987cdd62f9"
+python-resources        = "https://repo1.maven.org/maven2/org/graalvm/python/python-resources/25.0.3/python-resources-25.0.3.jar#sha256:974c82ba1742f0d72ad8b23f410dc5957318215817d1d91515922ac52644510e"
+python-launcher         = "https://repo1.maven.org/maven2/org/graalvm/python/python-launcher/25.0.3/python-launcher-25.0.3.jar#sha256:f3fbed5ce6cafd891a6a53b34bc8fbcc2540040d85adc302981d2ad9ead14c56"
