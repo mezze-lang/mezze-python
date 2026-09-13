@@ -9,7 +9,7 @@ external `mez` dependency (polyglot-as-a-package pilot).
 # your Mezze.toml
 
 [dependencies]
-mezze_python = "github:mezze-lang/mezze-python@0.1.0"
+mezze_python = "github:mezze-lang/mezze-python@0.1.1"
 
 [polyglot.python]
 packages = ["numpy>=1.24.0"]
