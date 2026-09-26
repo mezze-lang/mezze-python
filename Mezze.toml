@@ -1,6 +1,6 @@
 [package]
 name    = "mezze-python"
-version = "0.5.0"
+version = "0.6.0"
 
 # Two library entry points, both re-exported to consumers via the
 # package's snake_case module name `mezze_python`:
@@ -41,14 +41,12 @@ runtime_dir = ".deps/python"
 # along for free (this is why `[maven]` supersedes `[jars]` — no
 # manual sha bookkeeping, real dependency management).
 #
-# Maven Central hosts the GraalPy jars; the mezze-lang maven repo
-# hosts `polyglot-python-natives`. Both are declared below.
+# Only the GraalPy language jars — this package ships NO natives of its own.
+# As of 0.6.0 all interop goes through the first-party `Polyglot` effect in
+# `std::polyglot::core` (handled by `Runtime`, the sole native caller), so the
+# old `dev.mezze:polyglot-python-natives` plugin jar is gone and with it the
+# dependency on the mezze-lang maven repo.
 [maven]
 "org.graalvm.python:python-language"          = "25.0.3"
 "org.graalvm.python:python-resources"         = "25.0.3"
 "org.graalvm.python:python-launcher"          = "25.0.3"
-"dev.mezze:polyglot-python-natives"           = "0.2.0"
-
-[[maven-repo]]
-id  = "mezze-lang"
-url = "https://raw.githubusercontent.com/mezze-lang/mezze-maven/main/"

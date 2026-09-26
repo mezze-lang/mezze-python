@@ -5,109 +5,127 @@
 # do ...` gives `Python.import` and `Python.eval`, both yielding
 # `Result PyForeign InteropError`.
 #
+# THIS PACKAGE WRITES NO NATIVES. Every operation delegates to the first-party
+# `Polyglot` effect from `std::polyglot::core`, whose sole handler `Runtime` is
+# the only thing that touches the runtime's native interop surface. Each verb
+# buries its own `perform Runtime in Polyglot.<op> …`, so a user calls
+# `pf.attr{}` / `Python.import{}` with no enclosing perform and never sees a
+# `Polyglot.*` op or the guest id `"python"` — that string is baked into this
+# module exactly once per entry point. This is the whole point of the two-layer
+# design: a third party adds a GraalVM language in pure Mezze, with no Java.
+#
 # The verb set is the smallest that is still COMPLETE against Python's data
 # model, named the Python way: `attr`/`set_attr`/`has_attr` (getattr/setattr/
 # hasattr), `item`/`set_item` (obj[k] — one subscript for list AND dict, via
 # `__getitem__`/`__setitem__`), `items` (dict.items), `len`, `to_seq` (list(obj)
 # — drains any iterable), `call`/`method`/`new`, and `int`/`float`/`str`/`bool`/
-# `is_none`/`type_name`. One verb per operation — no `invoke_member`/`get_member`
-# synonyms, no `iter`/`next` cursor. Mirrors std::polyglot::jvm's shape with
-# Python vocabulary.
-use std::polyglot::core::{ InteropError }
+# `is_none`/`type_name`. Mirrors std::polyglot::jvm's shape with Python vocabulary.
+use std::polyglot::core::{ InteropError, Polyglot, Runtime, Foreign }
 
-## Opaque handle to a Python object. Runtime: the same `MezzeForeign` Java class
-## every language uses; the newtype gives Mezze-level type safety against mixing
-## Python and non-Python Foreigns.
-pub newtype PyForeign = __NativeForeign
+## Opaque handle to a Python object. Wraps the public `Foreign` handle (never the
+## internal native primitive); the newtype gives Mezze-level type safety against
+## mixing Python and non-Python Foreigns.
+pub newtype PyForeign = Foreign
 
-## Python host effect. `import` performs `importlib.import_module` and returns the
-## requested (possibly nested) module. `eval` parses and evaluates a Python
-## expression in the ambient Truffle Env.
+## Python host effect — the typed entry point. `import` resolves and returns a
+## (possibly nested) module; `eval` evaluates a Python expression. The user
+## performs only `GraalPy`; its handler buries `perform Runtime` internally.
 effect Python where {
   import: { module: Str } -> Result PyForeign InteropError <Python>,
   eval:   { source: Str } -> Result PyForeign InteropError <Python>
 }
 
-## Default Python host — routes all ops through the ambient Truffle Env's GraalPy
+## Default Python host — routes through the ambient Truffle Env's GraalPy
 ## interpreter. Zero-field: the polyglot Context is managed by the runtime from
 ## `Mezze.toml [polyglot.python]`; the handler carries no user configuration.
 pub type GraalPy = {}
 
 impl Python for GraalPy where {
-  import = { module } -> __native_python_import_module { name = module },
-  eval   = { source } -> __native_python_eval          { source = source },
+  ## Evaluate a Python expression. `"python"` is baked here (one of two places).
+  eval = { source } ->
+    perform Runtime in Polyglot.eval_raw { lang = "python", source = source },
+  ## Import a module WITHOUT string interpolation: eval the constant
+  ## `importlib.import_module` reference to get the importer callable, then
+  ## `execute` it with the module name as a BOXED argument. The module name never
+  ## enters a code string, so there is no quote-breakout / injection surface.
+  import = { module } -> perform Runtime in do
+    match Polyglot.eval_raw { lang = "python", source = "__import__('importlib').import_module" } is
+      Ok  { val = importer } ->
+        Polyglot.execute { on = importer, args = [Polyglot.box_str { val = module, lang = "python" }] }
+      Err { error } -> Err { error = error },
 }
 
-## The complete Python verb set on a PyForeign. Fallible verbs return
-## `Result PyForeign InteropError` (or a coerced scalar) — chain them directly on
-## the Result via the mirror impl below, no `match` between steps.
+## The complete Python verb set on a PyForeign. Every verb buries its own
+## `perform Runtime`, so chains run with no enclosing perform. Fallible verbs
+## return `Result PyForeign InteropError` (or a coerced scalar) — chain them
+## directly on the Result via the mirror impl below, no `match` between steps.
 impl PyForeign where {
   ## ---- attributes: getattr / setattr / hasattr ----
 
   ## Read an attribute — Python `obj.name`.
   attr     = { it, name } ->
-    __native_polyglot_read_member  { val = it, name = name },
+    perform Runtime in Polyglot.read_member { on = it, name = name },
   ## Set an attribute — Python `obj.name = val`.
   set_attr = { it, name, val } ->
-    __native_polyglot_write_member { val = it, name = name, new_val = val },
+    perform Runtime in Polyglot.write_member { on = it, name = name, val = val },
   ## True iff the attribute is readable — Python `hasattr(obj, name)`.
   has_attr = { it, name } ->
-    __native_polyglot_has_member   { val = it, name = name },
+    perform Runtime in Polyglot.has_member { on = it, name = name },
 
   ## ---- call / method / construct ----
 
   ## Call a callable — Python `f(*args)`.
   call   = { it, args } ->
-    __native_polyglot_execute      { val = it, args = args },
+    perform Runtime in Polyglot.execute { on = it, args = args },
   ## Call a method by name — Python `obj.name(*args)`.
   method = { it, name, args } ->
-    __native_polyglot_invoke_member { val = it, name = name, args = args },
+    perform Runtime in Polyglot.invoke_member { on = it, name = name, args = args },
   ## Instantiate a class — Python `Cls(*args)`.
   new    = { it, args } ->
-    __native_polyglot_instantiate  { val = it, args = args },
+    perform Runtime in Polyglot.instantiate { on = it, args = args },
 
   ## ---- subscript: obj[key] for list AND dict, via the data model ----
 
   ## Read a subscript — Python `obj[key]` (`__getitem__`); works for lists, dicts,
   ## numpy arrays, and anything with `__getitem__`. `key` is a PyForeign.
   item     = { it, key } ->
-    __native_polyglot_invoke_member { val = it, name = "__getitem__", args = [key] },
+    perform Runtime in Polyglot.invoke_member { on = it, name = "__getitem__", args = [key] },
   ## Set a subscript — Python `obj[key] = val` (`__setitem__`).
   set_item = { it, key, val } ->
-    __native_polyglot_invoke_member { val = it, name = "__setitem__", args = [key, val] },
+    perform Runtime in Polyglot.invoke_member { on = it, name = "__setitem__", args = [key, val] },
   ## Every entry of a mapping as a seq of two-element `[key, value]` Foreigns — the
   ## shape a codec's `decode_map` walks (Python `dict.items()`).
   items    = { it } ->
-    __native_polyglot_hash_entries { val = it },
+    perform Runtime in Polyglot.hash_entries { on = it },
 
   ## ---- length / iteration ----
 
   ## Python `len(obj)`, coerced to Mezze Int — via `__len__`, so it is defined
   ## wherever Python's `len` is (list, dict, str, numpy, custom `__len__`).
-  len    = { it } ->
-    match __native_polyglot_invoke_member { val = it, name = "__len__", args = [] } is
-      Ok { val = f } -> __native_polyglot_as_long { val = f }
+  len    = { it } -> perform Runtime in do
+    match Polyglot.invoke_member { on = it, name = "__len__", args = [] } is
+      Ok  { val = f } -> Polyglot.as_int { on = f }
       Err { error } -> Err { error = error },
   ## Drain any iterable — a list, generator, range, or `__iter__`-bearing object —
   ## into a Mezze seq of Foreigns in ONE crossing (Python `list(obj)`). The cursor
   ## stays inside the runtime, so no mutable iterator reaches pure code.
   to_seq = { it } ->
-    __native_polyglot_to_seq       { val = it },
+    perform Runtime in Polyglot.to_seq { on = it },
 
   ## ---- value coercions (out) ----
 
   ## Python `int(x)`.
-  int       = { it } -> __native_polyglot_as_long    { val = it },
+  int       = { it } -> perform Runtime in Polyglot.as_int    { on = it },
   ## Python `float(x)`.
-  float     = { it } -> __native_polyglot_as_double  { val = it },
+  float     = { it } -> perform Runtime in Polyglot.as_float  { on = it },
   ## Python `str(x)` (of an already-stringy Foreign).
-  str       = { it } -> __native_polyglot_as_string  { val = it },
+  str       = { it } -> perform Runtime in Polyglot.as_str    { on = it },
   ## Python `bool(x)` (of an already-boolean Foreign).
-  bool      = { it } -> __native_polyglot_as_boolean { val = it },
+  bool      = { it } -> perform Runtime in Polyglot.as_bool   { on = it },
   ## Python `x is None`.
-  is_none   = { it } -> __native_polyglot_is_null    { val = it },
+  is_none   = { it } -> perform Runtime in Polyglot.is_null   { on = it },
   ## `type(x).__name__`.
-  type_name = { it } -> __native_polyglot_type_name  { val = it },
+  type_name = { it } -> perform Runtime in Polyglot.type_name { on = it },
 }
 
 ## The SAME verbs on `Result PyForeign InteropError` — the return type of every
@@ -176,20 +194,27 @@ impl Result PyForeign InteropError where {
 }
 
 ## Constructors — lift a Mezze primitive into a PyForeign so it can be passed as
-## an argument to `.method{}` / `.call{}` / `.item{}`. For containers and records,
-## prefer the codec (`x.to_py {}`).
-pub let from_int:   { val: Int   } -> PyForeign = { val } -> __native_python_from_int   { val = val }
-pub let from_float: { val: Float } -> PyForeign = { val } -> __native_python_from_float { val = val }
-pub let from_str:   { val: Str   } -> PyForeign = { val } -> __native_python_from_str   { val = val }
-pub let from_bool:  { val: Bool  } -> PyForeign = { val } -> __native_python_from_bool  { val = val }
-pub let null_val:   {}            -> PyForeign = {}     -> __native_python_null_val    {}
+## an argument to `.method{}` / `.call{}` / `.item{}`. Each mints a foreign through
+## the `Polyglot` effect with the guest id `"python"` baked in here — a caller
+## writes `from_int { val = 5 }`, never a `lang` string. For containers and
+## records, prefer the codec (`x.to_py {}`).
+pub let from_int:   { val: Int   } -> PyForeign = { val } ->
+  perform Runtime in Polyglot.box_int   { val = val, lang = "python" }
+pub let from_float: { val: Float } -> PyForeign = { val } ->
+  perform Runtime in Polyglot.box_float { val = val, lang = "python" }
+pub let from_str:   { val: Str   } -> PyForeign = { val } ->
+  perform Runtime in Polyglot.box_str   { val = val, lang = "python" }
+pub let from_bool:  { val: Bool  } -> PyForeign = { val } ->
+  perform Runtime in Polyglot.box_bool  { val = val, lang = "python" }
+pub let null_val:   {}            -> PyForeign = {} ->
+  perform Runtime in Polyglot.box_null  { lang = "python" }
 
 ## Build a Python-visible list from already-wrapped Foreign elements — an interop
 ## VIEW over the elements, not a copy. Backs a codec's `encode_list`.
 pub let py_list: { elems: [PyForeign] } -> PyForeign = { elems } ->
-  __native_python_make_list { elems = elems }
+  perform Runtime in Polyglot.box_list { elems = elems, lang = "python" }
 
 ## Build a Python-visible dict from parallel key and value sequences. Companion to
 ## `py_list`, backing a codec's `encode_map` / `encode_record`. Keys keep order.
 pub let py_dict: { keys: [PyForeign], vals: [PyForeign] } -> PyForeign = { keys, vals } ->
-  __native_python_make_dict { keys = keys, vals = vals }
+  perform Runtime in Polyglot.box_dict { keys = keys, vals = vals, lang = "python" }
