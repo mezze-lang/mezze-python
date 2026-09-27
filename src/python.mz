@@ -37,9 +37,8 @@ effect Python where {
 
 ## Default Python host — routes through the ambient Truffle Env's GraalPy
 ## interpreter. Zero-field: the polyglot Context is managed by the runtime from
-## `Mezze.toml [polyglot.python]`; the handler carries no user configuration.
-pub type GraalPy = {}
-
+## `Mezze.toml [polyglot.python]`; the handler carries no user configuration. The
+## handler type is introduced by the impl itself — no separate `type` is needed.
 impl Python for GraalPy where {
   ## Evaluate a Python expression. `"python"` is baked here (one of two places).
   eval = { source } ->
