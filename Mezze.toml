@@ -30,7 +30,7 @@ version = "0.6.1"
 # host CPython.
 [polyglot.provider]
 language    = "python"
-install     = "graalpy -m pip install --disable-pip-version-check --no-cache-dir --config-settings=setup-args=-Dblas=none --config-settings=setup-args=-Dlapack=none --config-settings=compile-args=-j1 --target {dest} {packages}"
+install     = "{graalpy} -m pip install --disable-pip-version-check --no-cache-dir --config-settings=setup-args=-Dblas=none --config-settings=setup-args=-Dlapack=none --config-settings=compile-args=-j1 --target {dest} {packages}"
 runtime_env = "PYTHONPATH"
 runtime_dir = ".deps/python"
 
