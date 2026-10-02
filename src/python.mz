@@ -93,7 +93,7 @@ impl PyForeign where {
   set_item = { it, key, val } ->
     perform Runtime in Polyglot.invoke_member { on = it, name = "__setitem__", args = [key, val] },
   ## Every entry of a mapping as a seq of two-element `[key, value]` Foreigns — the
-  ## shape a codec's `decode_map` walks (Python `dict.items()`).
+  ## shape a codec's `decode_mapping` walks (Python `dict.items()`).
   items    = { it } ->
     perform Runtime in Polyglot.hash_entries { on = it },
 
@@ -209,11 +209,11 @@ pub let null_val:   {}            -> PyForeign <*> = {} ->
   perform Runtime in Polyglot.box_null  { lang = "python" }
 
 ## Build a Python-visible list from already-wrapped Foreign elements — an interop
-## VIEW over the elements, not a copy. Backs a codec's `encode_list`.
+## VIEW over the elements, not a copy. Backs a codec's `encode_sequence`.
 pub let py_list: { elems: [PyForeign] } -> PyForeign <*> = { elems } ->
   perform Runtime in Polyglot.box_list { elems = elems, lang = "python" }
 
 ## Build a Python-visible dict from parallel key and value sequences. Companion to
-## `py_list`, backing a codec's `encode_map` / `encode_record`. Keys keep order.
+## `py_list`, backing a codec's `encode_mapping` / `encode_record`. Keys keep order.
 pub let py_dict: { keys: [PyForeign], vals: [PyForeign] } -> PyForeign <*> = { keys, vals } ->
   perform Runtime in Polyglot.box_dict { keys = keys, vals = vals, lang = "python" }
