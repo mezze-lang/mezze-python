@@ -20,7 +20,7 @@
 # `__getitem__`/`__setitem__`), `items` (dict.items), `len`, `to_seq` (list(obj)
 # — drains any iterable), `call`/`method`/`new`, and `int`/`float`/`str`/`bool`/
 # `is_none`/`type_name`. Mirrors std::polyglot::jvm's shape with Python vocabulary.
-use std::polyglot::core::{ InteropError, Polyglot, Runtime, Foreign }
+use std::polyglot::core::{ InteropError, Polyglot, Runtime, Foreign, lift }
 
 ## Opaque handle to a Python object. Wraps the public `Foreign` handle (never the
 ## internal native primitive); the newtype gives Mezze-level type safety against
@@ -41,17 +41,23 @@ effect Python where {
 ## handler type is introduced by the impl itself — no separate `type` is needed.
 impl Python for GraalPy where {
   ## Evaluate a Python expression. `"python"` is baked here (one of two places).
-  eval = { source } ->
-    perform Runtime in Polyglot.eval_raw { lang = "python", source = source },
+  ## `eval_raw` yields a bare error-carrying foreign; `lift` turns it into the
+  ## `Result` this entry point promises (the one crossing, once, at entry).
+  eval = { source } -> perform Runtime in
+    lift { on = Polyglot.eval_raw { lang = "python", source = source } },
   ## Import a module WITHOUT string interpolation: eval the constant
   ## `importlib.import_module` reference to get the importer callable, then
   ## `execute` it with the module name as a BOXED argument. The module name never
   ## enters a code string, so there is no quote-breakout / injection surface.
-  import = { module } -> perform Runtime in do
-    match Polyglot.eval_raw { lang = "python", source = "__import__('importlib').import_module" } is
-      Ok  { val = importer } ->
-        Polyglot.execute { on = importer, args = [Polyglot.box_str { val = module, lang = "python" }] }
-      Err { error } -> Err { error = error },
+  ## `eval_raw` and `execute` both yield bare foreigns, so the two producer steps
+  ## chain on the foreign and `lift` materializes the single `Result` at the end.
+  import = { module } -> perform Runtime in
+    lift {
+      on = Polyglot.execute {
+        on = Polyglot.eval_raw { lang = "python", source = "__import__('importlib').import_module" },
+        args = [Polyglot.box_str { val = module, lang = "python" }],
+      },
+    },
 }
 
 ## The complete Python verb set on a PyForeign. Every verb buries its own
@@ -143,33 +149,38 @@ impl PyForeign where {
 ## `PyForeign`; on `Err` it propagates the error. The generic `impl Result 'a 'e`
 ## (map / get_or / flat_map / …) still applies on top.
 impl Result PyForeign InteropError where {
+  # ---- producer verbs: the bare `PyForeign` form yields an error-carrying
+  # foreign, so on `Ok` we `lift` that foreign back into a `Result` (the chain
+  # stays a `Result` for the next step); on `Err` the earlier error propagates. ----
   attr = { it, name } -> match it is
-    Ok  { val = f } -> f.attr { name = name }
+    Ok  { val = f } -> perform Runtime in lift { on = f.attr { name = name } }
     Err { error }   -> Err { error = error },
   set_attr = { it, name, val } -> match it is
-    Ok  { val = f } -> f.set_attr { name = name, val = val }
-    Err { error }   -> Err { error = error },
-  has_attr = { it, name } -> match it is
-    Ok  { val = f } -> Ok { val = f.has_attr { name = name } }
+    Ok  { val = f } -> perform Runtime in lift { on = f.set_attr { name = name, val = val } }
     Err { error }   -> Err { error = error },
   call = { it, args } -> match it is
-    Ok  { val = f } -> f.call { args = args }
+    Ok  { val = f } -> perform Runtime in lift { on = f.call { args = args } }
     Err { error }   -> Err { error = error },
   method = { it, name, args } -> match it is
-    Ok  { val = f } -> f.method { name = name, args = args }
+    Ok  { val = f } -> perform Runtime in lift { on = f.method { name = name, args = args } }
     Err { error }   -> Err { error = error },
   new = { it, args } -> match it is
-    Ok  { val = f } -> f.new { args = args }
+    Ok  { val = f } -> perform Runtime in lift { on = f.new { args = args } }
     Err { error }   -> Err { error = error },
   item = { it, key } -> match it is
-    Ok  { val = f } -> f.item { key = key }
+    Ok  { val = f } -> perform Runtime in lift { on = f.item { key = key } }
     Err { error }   -> Err { error = error },
   set_item = { it, key, val } -> match it is
-    Ok  { val = f } -> f.set_item { key = key, val = val }
+    Ok  { val = f } -> perform Runtime in lift { on = f.set_item { key = key, val = val } }
     Err { error }   -> Err { error = error },
   items = { it } -> match it is
-    Ok  { val = f } -> f.items {}
+    Ok  { val = f } -> perform Runtime in lift { on = f.items {} }
     Err { error }  -> Err { error = error },
+  # ---- crossing verbs: the bare form ALREADY yields a `Result X InteropError`,
+  # so on `Ok` we forward it verbatim (no extra `Ok {}` wrap); `Err` propagates. ----
+  has_attr = { it, name } -> match it is
+    Ok  { val = f } -> f.has_attr { name = name }
+    Err { error }   -> Err { error = error },
   len = { it } -> match it is
     Ok  { val = f } -> f.len {}
     Err { error }  -> Err { error = error },
@@ -189,10 +200,10 @@ impl Result PyForeign InteropError where {
     Ok  { val = f } -> f.bool {}
     Err { error }  -> Err { error = error },
   is_none = { it } -> match it is
-    Ok  { val = f } -> Ok { val = f.is_none {} }
+    Ok  { val = f } -> f.is_none {}
     Err { error }  -> Err { error = error },
   type_name = { it } -> match it is
-    Ok  { val = f } -> Ok { val = f.type_name {} }
+    Ok  { val = f } -> f.type_name {}
     Err { error }  -> Err { error = error },
 }
 
