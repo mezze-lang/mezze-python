@@ -60,6 +60,36 @@ impl Python for GraalPy where {
     },
 }
 
+## Sandboxed Python host — the SAME `Python` effect as `GraalPy`, but every op runs
+## in an isolated INNER context with an explicit access policy. `perform GraalPyWith
+## { config } in do …` IS the isolation boundary: `initialize_scope` opens the inner
+## context (handle bound to `scope`), `finalize_scope` closes it. A `Python.eval`
+## result is a live foreign over that context, chainable with `.int{}`/`.attr{}` until
+## it closes. User code still writes only `Python.*` — `Polyglot`/`Runtime`/`"python"`
+## stay buried. `config` is a structural record (not a nominal type); spread
+## `py_defaults` and override only the knobs you want to deny.
+impl Python for GraalPyWith { config: { allow_io: Bool, allow_native: Bool, allow_create_thread: Bool, allow_create_process: Bool, allow_host_class_loading: Bool, allow_host_lookup: Bool, allow_polyglot_access: Bool } } where {
+  initialize_scope = {} -> perform Runtime in Polyglot.open_context { lang = "python", config = config },
+  finalize_scope = {} -> do
+    let _ = perform Runtime in Polyglot.close_context { ctx = scope }
+    {},
+  eval = { source } -> perform Runtime in
+    lift { on = Polyglot.eval_in { ctx = scope, source = source } },
+  import = { module } -> perform Runtime in
+    lift {
+      on = Polyglot.execute {
+        on = Polyglot.eval_in { ctx = scope, source = "__import__('importlib').import_module" },
+        args = [Polyglot.box_str { val = module, lang = "python" }],
+      },
+    },
+}
+
+## Default `Context.Builder` policy for `GraalPyWith` — PERMISSIVE (matches ambient
+## `GraalPy`; `allow_native = True` so NumPy's C extensions load). Sandboxing is
+## OPT-IN: spread and deny, e.g. `GraalPyWith { config = { ...py_defaults, allow_io = False } }`.
+pub let py_defaults: { allow_io: Bool, allow_native: Bool, allow_create_thread: Bool, allow_create_process: Bool, allow_host_class_loading: Bool, allow_host_lookup: Bool, allow_polyglot_access: Bool } =
+  { allow_io = True, allow_native = True, allow_create_thread = True, allow_create_process = True, allow_host_class_loading = True, allow_host_lookup = True, allow_polyglot_access = True }
+
 ## The complete Python verb set on a PyForeign. Every verb buries its own
 ## `perform Runtime`, so chains run with no enclosing perform. Fallible verbs
 ## return `Result PyForeign InteropError` (or a coerced scalar) — chain them
