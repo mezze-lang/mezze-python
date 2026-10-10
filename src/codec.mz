@@ -19,6 +19,7 @@ use std::codec::core::{
   Format,
   EncodeScalar, EncodeOption, EncodeSequence, EncodeMapping, EncodeRecord, EncodeVariant,
   DecodeScalar, DecodeOption, DecodeSequence, DecodeMapping, DecodeRecord, DecodeVariant,
+  EncodeScalarSequence, DecodeScalarSequence,
   Encode, Decode,
   CodecCtx, SharedConfig, DecodeError,
   default_shared,
@@ -33,7 +34,8 @@ use std::polyglot::core::{ InteropError }
 use mezze_python::python::{
   PyForeign,
   from_int, from_float, from_str, from_bool, null_val,
-  py_list, py_dict
+  py_list, py_dict,
+  py_ints, py_floats, py_strs, py_bools
 }
 use std::collections::seq
 use std::float
@@ -193,6 +195,16 @@ impl EncodeSequence for PythonC having 'out = PyForeign where {
   encode_sequence = { it, elems, ctx } -> py_list { elems = elems },
 }
 
+## BULK scalar-sequence fast path (optional): box a whole `[Int]`/`[Float]`/`[Str]`/
+## `[Bool]` into a Python list in ONE crossing. `Encode PythonC [Int]` routes here
+## when present; other element types stay on `EncodeSequence`.
+impl EncodeScalarSequence for PythonC having 'out = PyForeign where {
+  encode_int_seq   = { it, vals, ctx } -> py_ints   { vals = vals },
+  encode_float_seq = { it, vals, ctx } -> py_floats { vals = vals },
+  encode_str_seq   = { it, vals, ctx } -> py_strs   { vals = vals },
+  encode_bool_seq  = { it, vals, ctx } -> py_bools  { vals = vals },
+}
+
 impl EncodeMapping for PythonC having 'out = PyForeign where {
   encode_mapping = { it, entries, ctx } -> py_dict {
     keys = seq::map { xs = entries, f = { x } -> x.key },
@@ -266,6 +278,36 @@ impl DecodeSequence for PythonC having 'in = PyForeign where {
       message = "Expected an array-shaped Foreign",
       expected = "List",
       found = Some { val = tname { f = val } },
+    },
+}
+
+## BULK scalar-sequence fast path (optional): drain + coerce a whole Python list to a
+## Mezze `[Int]`/`[Float]`/`[Str]`/`[Bool]` in ONE crossing (numpy scalars via
+## `.item()`). `Decode PythonC [Int]` routes here when present.
+impl DecodeScalarSequence for PythonC having 'in = PyForeign where {
+  decode_int_seq = { it, val, ctx } -> match val.to_ints {} is
+    Ok { val = xs } -> Ok { val = xs }
+    Err { error = _ } -> decode_error {
+      path = ctx.path, message = "Expected an array of Int-coercible Foreigns",
+      expected = "[Int]", found = Some { val = tname { f = val } },
+    },
+  decode_float_seq = { it, val, ctx } -> match val.to_floats {} is
+    Ok { val = xs } -> Ok { val = xs }
+    Err { error = _ } -> decode_error {
+      path = ctx.path, message = "Expected an array of Float-coercible Foreigns",
+      expected = "[Float]", found = Some { val = tname { f = val } },
+    },
+  decode_str_seq = { it, val, ctx } -> match val.to_strs {} is
+    Ok { val = xs } -> Ok { val = xs }
+    Err { error = _ } -> decode_error {
+      path = ctx.path, message = "Expected an array of Str-coercible Foreigns",
+      expected = "[Str]", found = Some { val = tname { f = val } },
+    },
+  decode_bool_seq = { it, val, ctx } -> match val.to_bools {} is
+    Ok { val = xs } -> Ok { val = xs }
+    Err { error = _ } -> decode_error {
+      path = ctx.path, message = "Expected an array of Bool-coercible Foreigns",
+      expected = "[Bool]", found = Some { val = tname { f = val } },
     },
 }
 
