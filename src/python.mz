@@ -137,10 +137,12 @@ impl PyForeign where {
 
   ## Python `len(obj)`, coerced to Mezze Int — via `__len__`, so it is defined
   ## wherever Python's `len` is (list, dict, str, numpy, custom `__len__`).
-  len    = { it } -> perform Runtime in do
-    match Polyglot.invoke_member { on = it, name = "__len__", args = [] } is
-      Ok  { val = f } -> Polyglot.as_int { on = f }
-      Err { error } -> Err { error = error },
+  len    = { it } -> perform Runtime in
+    # `invoke_member` yields a BARE (error-carrying) foreign — NOT a Result — so
+    # it must NOT be matched as Ok/Err (that crashed with "no variant tag
+    # matched"). Thread it into `as_int`, the crossing that turns the foreign
+    # into `Result Int InteropError`, surfacing any error `__len__` carried.
+    Polyglot.as_int { on = Polyglot.invoke_member { on = it, name = "__len__", args = [] } },
   ## Drain any iterable — a list, generator, range, or `__iter__`-bearing object —
   ## into a Mezze seq of Foreigns in ONE crossing (Python `list(obj)`). The cursor
   ## stays inside the runtime, so no mutable iterator reaches pure code.

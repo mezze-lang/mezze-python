@@ -1,0 +1,24 @@
+[package]
+name = "mezze_python_conformance"
+version = "0.0.0"
+
+# Conformance harness for the mezze-python provider.
+#
+#   mez check                 # type-level conformance (runtime-free): every
+#                             # verb + the Result mirror must compile, backed
+#                             # by the toolchain's #22 foreign-kind gate.
+#   mez dev --no-watch        # behavioural conformance: scalar/bulk/object
+#                             # round-trips + a GraalPyWith sandbox boot, with
+#                             # a non-zero exit on any failed check.
+[[app]]
+name = "conformance"
+path = "src/app.mz"
+entry = "main"
+
+# Depend on the provider AS IT IS in this working tree, not a pinned release.
+[path-dependencies]
+mezze-python = ".."
+
+# Opt in to GraalPy so `mez dev` can run the behavioural checks. No packages,
+# so `mez sync` fetches only the language jars (no pip install step).
+[polyglot.python]
