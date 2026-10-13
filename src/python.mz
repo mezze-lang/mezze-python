@@ -97,34 +97,46 @@ pub let py_defaults: { allow_io: Bool, allow_native: Bool, allow_create_thread: 
 impl PyForeign where {
   ## ---- attributes: getattr / setattr / hasattr ----
 
-  ## Read an attribute — Python `obj.name`.
+  ## Read an attribute — Python `getattr(obj, name)`. Routed through Python's
+  ## attribute protocol (a cached helper lambda) rather than raw interop
+  ## read_member, so it resolves on PRIMITIVES too: a Python str/int/float/bool
+  ## crosses as an interop value with no members, but `getattr` still finds its
+  ## methods — `Python.eval { source = "'abc'" }.attr { name = "upper" }` works.
   attr     = { it, name } ->
-    perform Runtime in Polyglot.read_member { on = it, name = name },
-  ## Set an attribute — Python `obj.name = val`.
+    perform Runtime in Polyglot.execute {
+      on = Polyglot.eval_raw { lang = "python", source = "lambda o, n: getattr(o, n)" },
+      args = [it, Polyglot.box_str { val = name, lang = "python" }],
+    },
+  ## Set an attribute — Python `setattr(obj, name, val)`; yields the receiver.
   set_attr = { it, name, val } ->
-    perform Runtime in Polyglot.write_member { on = it, name = name, val = val },
-  ## True iff the attribute is readable — Python `hasattr(obj, name)`.
+    perform Runtime in Polyglot.execute {
+      on = Polyglot.eval_raw { lang = "python", source = "lambda o, n, v: (setattr(o, n, v), o)[1]" },
+      args = [it, Polyglot.box_str { val = name, lang = "python" }, val],
+    },
+  ## True iff the attribute exists — Python `hasattr(obj, name)`.
   has_attr = { it, name } ->
-    perform Runtime in Polyglot.has_member { on = it, name = name },
+    perform Runtime in Polyglot.as_bool {
+      on = Polyglot.execute {
+        on = Polyglot.eval_raw { lang = "python", source = "lambda o, n: hasattr(o, n)" },
+        args = [it, Polyglot.box_str { val = name, lang = "python" }],
+      },
+    },
 
   ## ---- call / method / construct ----
 
   ## Call a callable — Python `f(*args)`.
   call   = { it, args } ->
     perform Runtime in Polyglot.execute { on = it, args = args },
-  ## Call a method by name — Python `obj.name(*args)`.
+  ## Call a method by name — Python `getattr(obj, name)(*args)`. Routed through
+  ## Python's attribute protocol (a cached helper lambda) rather than raw interop
+  ## invoke_member, so it works on PRIMITIVES as well as objects:
   ##
-  ## Works on Python OBJECTS (instances, modules, classes). It does NOT work on
-  ## Python PRIMITIVES — a Python `str`/`int`/`float`/`bool` crosses the interop
-  ## boundary as a Mezze-coercible value (which is what makes `.str{}` / `.int{}`
-  ## clean), not as a Python object carrying its methods. So prefer calling a
-  ## primitive's method INSIDE the eval'd Python, where it is one crossing and
-  ## always works:
-  ##
-  ##   Python.eval { source = "'abc'.upper()" }.str {}        # "ABC"  ✅
-  ##   Python.eval { source = "'abc'" }.method { name = "upper", args = [] }   # fails ❌
+  ##   Python.eval { source = "'abc'" }.method { name = "upper", args = [] }.str {}   # "ABC"
   method = { it, name, args } ->
-    perform Runtime in Polyglot.invoke_member { on = it, name = name, args = args },
+    perform Runtime in Polyglot.execute {
+      on = Polyglot.eval_raw { lang = "python", source = "lambda o, n, a: getattr(o, n)(*a)" },
+      args = [it, Polyglot.box_str { val = name, lang = "python" }, Polyglot.box_list { elems = args, lang = "python" }],
+    },
   ## Instantiate a class — Python `Cls(*args)`.
   new    = { it, args } ->
     perform Runtime in Polyglot.instantiate { on = it, args = args },
