@@ -113,6 +113,16 @@ impl PyForeign where {
   call   = { it, args } ->
     perform Runtime in Polyglot.execute { on = it, args = args },
   ## Call a method by name — Python `obj.name(*args)`.
+  ##
+  ## Works on Python OBJECTS (instances, modules, classes). It does NOT work on
+  ## Python PRIMITIVES — a Python `str`/`int`/`float`/`bool` crosses the interop
+  ## boundary as a Mezze-coercible value (which is what makes `.str{}` / `.int{}`
+  ## clean), not as a Python object carrying its methods. So prefer calling a
+  ## primitive's method INSIDE the eval'd Python, where it is one crossing and
+  ## always works:
+  ##
+  ##   Python.eval { source = "'abc'.upper()" }.str {}        # "ABC"  ✅
+  ##   Python.eval { source = "'abc'" }.method { name = "upper", args = [] }   # fails ❌
   method = { it, name, args } ->
     perform Runtime in Polyglot.invoke_member { on = it, name = name, args = args },
   ## Instantiate a class — Python `Cls(*args)`.
