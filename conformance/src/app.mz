@@ -134,13 +134,19 @@ let behavioural: {} -> Int <Python, Log, *>
     # error-carrying producer: a key read on a bare int yields an errored
     # foreign; coercing it must surface as Err, never crash the match.
     let k = want_err { label = "errored producer -> Err", got = Python.eval { source = "42" }.item { key = from_int { val = 0 } }.int {} }
-    # NOTE: `is_none` (on `None`) and `method`/`attr` invocation are exercised in
-    # `verb_coverage` for the TYPE-LEVEL contract but NOT asserted behaviourally:
-    # on this GraalPy they surface guest-runtime quirks that are not part of the
-    # provider's two-layer contract — `eval("None")` returns a module object, and
-    # interop member-invoke on GraalPy objects differs from GraalJS. Tracked as a
-    # runtime/interop finding, not a provider-source bug (the provider delegates
-    # correctly to `is_null` / `invoke_member`).
+    # None handling: python eval now returns None (not the module), so the common
+    # "python call returned None" shape reports is_none correctly. Guards the fix.
+    let d = want_true { label = "None is_none", got = Python.eval { source = "None" }.is_none {} }
+    let l = want_true { label = "dict.get miss is_none", got = Python.eval { source = "{}.get('x')" }.is_none {} }
+    # Method dispatch on a real python OBJECT. (A python str crosses as a
+    # TruffleString and so does not expose its str methods — eval the call in
+    # python instead; not asserted here.)
+    let m = want_int {
+      label = "object method dispatch",
+      got = Python.eval { source = "type('C', (), {'g': lambda self, x: x + 1})()" }
+        .method { name = "g", args = [from_int { val = 41 }] }.int {},
+      want = 42,
+    }
     let s1 = int::add { l = a, r = b }
     let s2 = int::add { l = s1, r = c }
     let s3 = int::add { l = s2, r = e }
@@ -148,7 +154,10 @@ let behavioural: {} -> Int <Python, Log, *>
     let s5 = int::add { l = s4, r = g }
     let s6 = int::add { l = s5, r = i }
     let s7 = int::add { l = s6, r = j }
-    int::add { l = s7, r = k }
+    let s8 = int::add { l = s7, r = k }
+    let s9 = int::add { l = s8, r = d }
+    let s10 = int::add { l = s9, r = l }
+    int::add { l = s10, r = m }
 
 let main = {} -> perform Console in perform SystemProcess in do
   let _ = println { msg = "== mezze-python conformance ==" }
