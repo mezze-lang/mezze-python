@@ -6,7 +6,9 @@
 #   1. TYPE-LEVEL (mez check, no guest runtime). `verb_coverage` references
 #      every PyForeign verb and both constructor families; `main` calls each
 #      crossing verb on a Result-typed receiver. The whole surface AND the
-#      `impl Result PyForeign InteropError` mirror must compile — a producer
+#      shape. There is NO `Result` mirror any more: the verbs live on
+#      PyForeign alone, an entry point yields a bare error-carrying
+#      foreign, and the error surfaces once at a crossing verb.
 #      verb that forgets `lift` cannot launder a bare foreign into a Result
 #      (the toolchain's #22 gate). So `mez check` alone is a conformance gate.
 #
