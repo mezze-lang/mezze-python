@@ -21,17 +21,24 @@ use std::polyglot::core::{ InteropError }
 use mezze_python::python::{
   Python, GraalPy, GraalPyWith, PyForeign, py_defaults,
   from_int, from_float, from_str, from_bool, null_val,
-  py_list, py_ints, py_floats, py_strs, py_bools, py_dict
+  py_list, py_ints, py_floats, py_strs, py_bools, py_dict,
+  py_fn, py_fn1, py_fn2
 }
 use std::int
+use std::result
+use std::collections::seq
 
 ## ── Layer 1: type-level verb coverage ───────────────────────────────────────
-let verb_coverage: { x: PyForeign } -> {}
+let verb_coverage: { x: PyForeign } -> {} <*>
   = { x } -> do
     # producer verbs — bare PyForeign -> PyForeign (chainable)
     let _ = x.attr { name = "p" }
     let _ = x.set_attr { name = "p", val = x }
     let _ = x.call { args = [x] }
+    # callbacks — a Mezze function crossing to Python by reference; its row is EMPTY
+    let _ = x.call { args = [ py_fn  { f = { args } -> seq::size { xs = args } } ] }
+    let _ = x.call { args = [ py_fn1 { f = { x } -> x } ] }
+    let _ = x.call { args = [ py_fn2 { f = { a, _b } -> a } ] }
     let _ = x.method { name = "m", args = [x] }
     let _ = x.new { args = [x] }
     let _ = x.item { key = x }
@@ -171,7 +178,37 @@ let behavioural: {} -> Int <Python, Log, *>
     let s10 = int::add { l = s9, r = l }
     let s11 = int::add { l = s10, r = m }
     let s12 = int::add { l = s11, r = n }
-    int::add { l = s12, r = o }
+    # callbacks: Python calls a Mezze function, positionally.
+    let cb1 = want_ints {
+      label = "py_fn1 under map",
+      got = Python.eval { source = "lambda f: list(map(f, [1, 2, 3]))" }
+        .call { args = [ py_fn1 { f = { x } -> result::get_or { result = x.int {}, def = 0 } * 10 } ] }.to_ints {},
+      want = [10, 20, 30],
+    }
+    let cb2 = want_int {
+      label = "py_fn2 under reduce",
+      got = Python.eval { source = "lambda f: __import__('functools').reduce(f, [1, 2, 3, 4], 0)" }
+        .call { args = [ py_fn2 { f = { a, b } -> result::get_or { result = a.int {}, def = 0 } + result::get_or { result = b.int {}, def = 0 } } ] }.int {},
+      want = 10,
+    }
+    let cb3 = want_int {
+      label = "py_fn is variadic",
+      got = Python.eval { source = "lambda f: f(1, 2, 3)" }
+        .call { args = [ py_fn { f = { args } -> seq::size { xs = args } } ] }.int {},
+      want = 3,
+    }
+    # a fixed-arity callable called with the wrong count is PYTHON's TypeError: the
+    # guest raise is caught INTO the errored foreign the call yields, never into Mezze
+    let cb4 = want_err {
+      label = "wrong arity is Python's error (errored foreign)",
+      got = Python.eval { source = "lambda f: f(1, 2)" }
+        .call { args = [ py_fn1 { f = { _x } -> 0 } ] }.int {},
+    }
+    let s13 = int::add { l = s12, r = o }
+    let s14 = int::add { l = s13, r = cb1 }
+    let s15 = int::add { l = s14, r = cb2 }
+    let s16 = int::add { l = s15, r = cb3 }
+    int::add { l = s16, r = cb4 }
 
 let main = {} -> perform Console in perform SystemProcess in do
   let _ = println { msg = "== mezze-python conformance ==" }

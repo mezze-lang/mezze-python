@@ -236,3 +236,22 @@ pub let py_bools:  { vals: [Bool] }  -> PyForeign <*> = { vals } ->
 ## `py_list`, backing a codec's `encode_mapping` / `encode_record`. Keys keep order.
 pub let py_dict: { keys: [PyForeign], vals: [PyForeign] } -> PyForeign <*> = { keys, vals } ->
   perform Runtime in Polyglot.box_dict { keys = keys, vals = vals, lang = "python" }
+
+## A Mezze function as a Python callable. Python calls are POSITIONAL here — the
+## interop call carries no keyword arguments — so `py_fn` receives whatever Python
+## passes as one `args` list of `PyForeign` (decode with `.int{}` / `.str{}`), and
+## `py_fn1` / `py_fn2` fix the arity for `map(f, xs)`, `sorted(key=f)`, `reduce(f)`;
+## Python calling with the wrong count is Python's TypeError, raised to Python. The
+## function's row is EMPTY on purpose: Python calls it OUTSIDE every `perform`, from
+## its own thread under its interpreter lock, so it may do nothing that needs a
+## handler — completing a promise is the model use.
+##
+## `asyncio` has no loop running unless someone runs it: a reactor built on Python's
+## loop runs `loop.run_forever()` on one Mezze-side task and completes promises from
+## the callbacks it schedules there.
+pub let py_fn:  { f: { args: [PyForeign] } -> 'r } -> PyForeign <*> = { f } ->
+  perform Runtime in Polyglot.box_fn  { f = f, lang = "python" }
+pub let py_fn1: { f: { x: PyForeign } -> 'r } -> PyForeign <*> = { f } ->
+  perform Runtime in Polyglot.box_fn1 { f = f, lang = "python" }
+pub let py_fn2: { f: { a: PyForeign, b: PyForeign } -> 'r } -> PyForeign <*> = { f } ->
+  perform Runtime in Polyglot.box_fn2 { f = f, lang = "python" }
