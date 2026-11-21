@@ -38,7 +38,7 @@ let verb_coverage: { x: PyForeign } -> {} <*>
     # callbacks — a Mezze function crossing to Python by reference; its row is EMPTY
     let _ = x.call { args = [ py_fn  { f = { args } -> seq::size { xs = args } } ] }
     let _ = x.call { args = [ py_fn1 { f = { x } -> x } ] }
-    let _ = x.call { args = [ py_fn2 { f = { a, _b } -> a } ] }
+    let _ = x.call { args = [ py_fn2 { f = { a, b } -> a } ] }
     let _ = x.method { name = "m", args = [x] }
     let _ = x.new { args = [x] }
     let _ = x.item { key = x }
@@ -202,7 +202,7 @@ let behavioural: {} -> Int <Python, Log, *>
     let cb4 = want_err {
       label = "wrong arity is Python's error (errored foreign)",
       got = Python.eval { source = "lambda f: f(1, 2)" }
-        .call { args = [ py_fn1 { f = { _x } -> 0 } ] }.int {},
+        .call { args = [ py_fn1 { f = { x } -> 0 } ] }.int {},
     }
     let s13 = int::add { l = s12, r = o }
     let s14 = int::add { l = s13, r = cb1 }
