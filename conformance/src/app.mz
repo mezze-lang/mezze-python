@@ -34,33 +34,33 @@ use std::collections::seq
 let verb_coverage: { x: PyForeign } -> {} <*>
   = { x } -> do
     # producer verbs — bare PyForeign -> PyForeign (chainable)
-    let _ = x.attr { name = "p" }
-    let _ = x.set_attr { name = "p", val = x }
-    let _ = x.call { args = [x] }
+    x.attr { name = "p" }
+    x.set_attr { name = "p", val = x }
+    x.call { args = [x] }
     # callbacks — a Mezze function crossing to Python by reference; its row is EMPTY
-    let _ = x.call { args = [ py_fn  { f = { args } -> seq::size { xs = args } } ] }
-    let _ = x.call { args = [ py_fn1 { f = { x } -> x } ] }
-    let _ = x.call { args = [ py_fn2 { f = { a, b } -> a } ] }
-    let _ = x.method { name = "m", args = [x] }
-    let _ = x.new { args = [x] }
-    let _ = x.item { key = x }
-    let _ = x.set_item { key = x, val = x }
-    let _ = x.items {}
+    x.call { args = [ py_fn  { f = { args } -> seq::size { xs = args } } ] }
+    x.call { args = [ py_fn1 { f = { x } -> x } ] }
+    x.call { args = [ py_fn2 { f = { a, b } -> a } ] }
+    x.method { name = "m", args = [x] }
+    x.new { args = [x] }
+    x.item { key = x }
+    x.set_item { key = x, val = x }
+    x.items {}
     # crossing verbs — PyForeign -> Result ... InteropError
-    let _ = x.has_attr { name = "p" }
-    let _ = x.len {}
-    let _ = x.to_seq {}
-    let _ = x.to_ints {}
-    let _ = x.to_floats {}
-    let _ = x.to_strs {}
-    let _ = x.to_bools {}
-    let _ = x.int {}
-    let _ = x.float {}
-    let _ = x.str {}
-    let _ = x.bool {}
-    let _ = x.is_none {}
-    let _ = x.type_name {}
-    let _ = x.check {}
+    x.has_attr { name = "p" }
+    x.len {}
+    x.to_seq {}
+    x.to_ints {}
+    x.to_floats {}
+    x.to_strs {}
+    x.to_bools {}
+    x.int {}
+    x.float {}
+    x.str {}
+    x.bool {}
+    x.is_none {}
+    x.type_name {}
+    x.check {}
     {}
 
 ## Constructor coverage — every lift-a-primitive and bulk-box entry point.
@@ -77,12 +77,12 @@ let ctor_coverage: {} -> [PyForeign] <*>
 ## ── Layer 2: behavioural checks ─────────────────────────────────────────────
 let pass: { label: Str } -> Int <Log>
   = { label } -> do
-    let _ = println { msg = "  ok    $(label)" }
+    println { msg = "  ok    $(label)" }
     0
 
 let fail: { label: Str, detail: Str } -> Int <Log>
   = { label, detail } -> do
-    let _ = println { msg = "  FAIL  $(label): $(detail)" }
+    println { msg = "  FAIL  $(label): $(detail)" }
     1
 
 let want_int: { label: Str, got: Result Int InteropError, want: Int } -> Int <Log>
@@ -224,23 +224,23 @@ let behavioural: {} -> Int <Python, Log, *>
     int::add { l = s18, r = cd2 }
 
 let main = {} -> perform Console in perform SystemProcess in do
-  let _ = println { msg = "== mezze-python conformance ==" }
-  let _ = println { msg = "" }
+  println { msg = "== mezze-python conformance ==" }
+  println { msg = "" }
 
-  let _ = println { msg = "GraalPy (ambient):" }
+  println { msg = "GraalPy (ambient):" }
   let ambient =
     perform GraalPy in do
       behavioural {}
 
-  let _ = println { msg = "" }
-  let _ = println { msg = "GraalPyWith (sandbox boot, permissive defaults):" }
+  println { msg = "" }
+  println { msg = "GraalPyWith (sandbox boot, permissive defaults):" }
   let sandboxed =
     perform GraalPyWith { config = py_defaults } in do
       behavioural {}
 
   let total = int::add { l = ambient, r = sandboxed }
-  let _ = println { msg = "" }
+  println { msg = "" }
   if total == 0 then println { msg = "== all conformance checks passed ==" }
   else do
-    let _ = println { msg = "== CONFORMANCE FAILED: $(int::to_str { n = total }) check(s) ==" }
+    println { msg = "== CONFORMANCE FAILED: $(int::to_str { n = total }) check(s) ==" }
     exit { code = 1 }

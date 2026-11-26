@@ -69,7 +69,7 @@ impl Python for GraalPy where {
 impl Python for GraalPyWith { config: { allow_io: Bool, allow_native: Bool, allow_create_thread: Bool, allow_create_process: Bool, allow_host_class_loading: Bool, allow_host_lookup: Bool, allow_polyglot_access: Bool } } where {
   initialize_scope = {} -> perform Runtime in Polyglot.open_context { lang = "python", config = config },
   finalize_scope = {} -> do
-    let _ = perform Runtime in Polyglot.close_context { ctx = scope }
+    perform Runtime in Polyglot.close_context { ctx = scope }
     {},
   eval = { source } -> perform Runtime in
     Polyglot.eval_in { ctx = scope, source = source },
