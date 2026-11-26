@@ -82,7 +82,7 @@ impl EncodeOption for PythonC having 'out = PyForeign where {
 
 ## `type_name` is an error-label probe that returns `Result Str InteropError`
 ## (it performs <Polyglot>); a probe that errors just yields "unknown".
-let tname: { f: PyForeign } -> Str <...> = { f } -> match f.type_name {} is
+let tname: { f: PyForeign } -> Str = { f } -> match f.type_name {} is
   Ok { val = t } -> t
   Err { error = _ } -> "unknown"
 
@@ -389,6 +389,6 @@ ability FromPy 'a for 'in where {
 }
 
 impl FromPy 'a for PyForeign where {
-  from_py:      { it: PyForeign }                   with Decode PythonC 'a -> Result 'a DecodeError = { it }         -> it.decode { config = python_default },
-  from_py_with: { it: PyForeign, config: PythonC }  with Decode PythonC 'a -> Result 'a DecodeError = { it, config } -> it.decode { config = config },
+  from_py:      { it: PyForeign }                   with Decode PythonC 'a PyForeign -> Result 'a DecodeError = { it }         -> it.decode { config = python_default },
+  from_py_with: { it: PyForeign, config: PythonC }  with Decode PythonC 'a PyForeign -> Result 'a DecodeError = { it, config } -> it.decode { config = config },
 }

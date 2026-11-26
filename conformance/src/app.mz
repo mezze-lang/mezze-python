@@ -18,6 +18,8 @@
 use std::effects::log::{ println, Console, Log }
 use std::effects::process::{ exit, SystemProcess }
 use std::polyglot::core::{ InteropError }
+use std::codec::core::{ DecodeError }
+use mezze_python::codec::{ ToPy, FromPy }
 use mezze_python::python::{
   Python, GraalPy, GraalPyWith, PyForeign, py_defaults,
   from_int, from_float, from_str, from_bool, null_val,
@@ -166,6 +168,15 @@ let behavioural: {} -> Int <Python, Log, *>
       got = Python.eval { source = "10" }.method { name = "bit_length", args = [] }.int {},
       want = 4,
     }
+    # codec: a Mezze value crosses into Python and back through the codec
+    # abilities. Nothing here imported the codec, so a stdlib signature change
+    # (Decode gaining its input type) broke it unnoticed.
+    let cd1 = want_int { label = "codec to_py", got = 42.to_py {}.int {}, want = 42 }
+    let back: Result Int DecodeError = from_int { val = 7 }.from_py {}
+    let cd2 = match back is
+      Ok { val = n } -> if n == 7 then pass { label = "codec from_py" }
+        else fail { label = "codec from_py", detail = "got $(int::to_str { n = n }), want 7" }
+      Err { error = _ } -> fail { label = "codec from_py", detail = "decode error" }
     let s1 = int::add { l = a, r = b }
     let s2 = int::add { l = s1, r = c }
     let s3 = int::add { l = s2, r = e }
@@ -208,7 +219,9 @@ let behavioural: {} -> Int <Python, Log, *>
     let s14 = int::add { l = s13, r = cb1 }
     let s15 = int::add { l = s14, r = cb2 }
     let s16 = int::add { l = s15, r = cb3 }
-    int::add { l = s16, r = cb4 }
+    let s17 = int::add { l = s16, r = cb4 }
+    let s18 = int::add { l = s17, r = cd1 }
+    int::add { l = s18, r = cd2 }
 
 let main = {} -> perform Console in perform SystemProcess in do
   let _ = println { msg = "== mezze-python conformance ==" }
