@@ -90,32 +90,32 @@ let want_int: { label: Str, got: Result Int InteropError, want: Int } -> Int <Lo
     Ok { val = n } ->
       if n == want then pass { label = label }
       else fail { label = label, detail = "got $(int::to_str { n = n }), want $(int::to_str { n = want })" }
-    Err { error = _ } -> fail { label = label, detail = "guest error" }
+    Err { ... } -> fail { label = label, detail = "guest error" }
 
 let want_str: { label: Str, got: Result Str InteropError, want: Str } -> Int <Log>
   = { label, got, want } -> match got is
     Ok { val = s } ->
       if s == want then pass { label = label }
       else fail { label = label, detail = "got '$(s)', want '$(want)'" }
-    Err { error = _ } -> fail { label = label, detail = "guest error" }
+    Err { ... } -> fail { label = label, detail = "guest error" }
 
 let want_true: { label: Str, got: Result Bool InteropError } -> Int <Log>
   = { label, got } -> match got is
     Ok { val = b } ->
       if b then pass { label = label } else fail { label = label, detail = "got False, want True" }
-    Err { error = _ } -> fail { label = label, detail = "guest error" }
+    Err { ... } -> fail { label = label, detail = "guest error" }
 
 let want_ints: { label: Str, got: Result [Int] InteropError, want: [Int] } -> Int <Log>
   = { label, got, want } -> match got is
     Ok { val = xs } ->
       if xs == want then pass { label = label }
       else fail { label = label, detail = "sequence mismatch" }
-    Err { error = _ } -> fail { label = label, detail = "guest error" }
+    Err { ... } -> fail { label = label, detail = "guest error" }
 
 let want_err: { label: Str, got: Result Int InteropError } -> Int <Log>
   = { label, got } -> match got is
-    Ok { val = _ } -> fail { label = label, detail = "expected Err, got Ok" }
-    Err { error = _ } -> pass { label = label }
+    Ok { ... } -> fail { label = label, detail = "expected Err, got Ok" }
+    Err { ... } -> pass { label = label }
 
 ## Scalar + bulk + object + error-model checks, parameterised over the active
 ## `Python` handler so the SAME battery runs under `GraalPy` and `GraalPyWith`.
@@ -176,7 +176,7 @@ let behavioural: {} -> Int <Python, Log, *>
     let cd2 = match back is
       Ok { val = n } -> if n == 7 then pass { label = "codec from_py" }
         else fail { label = "codec from_py", detail = "got $(int::to_str { n = n }), want 7" }
-      Err { error = _ } -> fail { label = "codec from_py", detail = "decode error" }
+      Err { ... } -> fail { label = "codec from_py", detail = "decode error" }
     let s1 = int::add { l = a, r = b }
     let s2 = int::add { l = s1, r = c }
     let s3 = int::add { l = s2, r = e }
